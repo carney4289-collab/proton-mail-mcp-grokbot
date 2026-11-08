@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import os
-import select
 import shutil
 import subprocess
 import sys
@@ -63,25 +62,30 @@ def _base_env() -> dict[str, str]:
 
 
 def _read_line(proc: subprocess.Popen, timeout: float = 20.0) -> dict:
-    import time
+    """Read one stdout line. A thread is required because Windows select() ignores pipes."""
+    box: dict[str, object] = {}
 
-    fd = proc.stdout.fileno()
-    buf = b""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        ready, _, _ = select.select([fd], [], [], 0.2)
-        if not ready:
-            if proc.poll() is not None:
-                break
-            continue
-        chunk = os.read(fd, 65536)
-        if not chunk:
-            break
-        buf += chunk
-        if b"\n" in buf:
-            line, _rest = buf.split(b"\n", 1)
-            return json.loads(line)
-    raise AssertionError("stdio server did not answer")
+    def _read() -> None:
+        stdout = proc.stdout
+        if stdout is None:
+            box["error"] = AssertionError("stdout is closed")
+            return
+        try:
+            box["line"] = stdout.readline()
+        except Exception as exc:
+            box["error"] = exc
+
+    worker = threading.Thread(target=_read, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        raise AssertionError("stdio server did not answer")
+    if "error" in box:
+        raise box["error"]  # type: ignore[misc]
+    line = box.get("line") or b""
+    if not isinstance(line, bytes) or not line.strip():
+        raise AssertionError("stdio server closed stdout")
+    return json.loads(line)
 
 
 def _drain(proc: subprocess.Popen) -> None:

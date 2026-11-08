@@ -25,9 +25,27 @@ PATCHES = [
 ]
 
 
+def tool_command(resolved: str, args: list[str], platform_name: str) -> list[str]:
+    """Build an argv list. Windows npm is npm.cmd, which CreateProcess cannot start.
+
+    cmd.exe is invoked with a fixed argument vector. The tool path comes from
+    shutil.which, not from an HTTP request, and shell=True is not used.
+    """
+    if platform_name == "nt" and resolved.lower().endswith((".cmd", ".bat")):
+        return ["cmd.exe", "/d", "/s", "/c", subprocess.list2cmdline([resolved, *args])]
+    return [resolved, *args]
+
+
 def _run(argv: list[str], **kwargs) -> None:
     print("+", " ".join(argv), flush=True)
     subprocess.check_call(argv, **kwargs)
+
+
+def _run_tool(name: str, args: list[str], **kwargs) -> None:
+    resolved = shutil.which(name)
+    if not resolved:
+        raise SystemExit(f"{name} was not found on PATH")
+    _run(tool_command(resolved, args, os.name), **kwargs)
 
 
 def _patch_bin() -> str | None:
@@ -91,7 +109,7 @@ def main() -> int:
     shutil.copyfile(ROOT / "patches" / "harden.ts", DEST / "src" / "harden.ts")
     for name in PATCHES:
         _apply(ROOT / "patches" / name)
-    _run(["npm", "ci", "--no-audit", "--no-fund"], cwd=DEST)
+    _run_tool("npm", ["ci", "--no-audit", "--no-fund"], cwd=DEST)
     if not index.is_file():
         sys.stderr.write("build/index.js was not produced\n")
         return 1

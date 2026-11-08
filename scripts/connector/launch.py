@@ -4,29 +4,39 @@ from __future__ import annotations
 import os
 
 
+def _basename(path: str) -> str:
+    """Last path segment, accepting both separators on either host OS."""
+    trimmed = path.rstrip("\\/")
+    cut = max(trimmed.rfind("\\"), trimmed.rfind("/"))
+    return trimmed if cut < 0 else trimmed[cut + 1 :]
+
+
+def _join(directory: str, name: str, platform_name: str) -> str:
+    """Join with the target platform's separator, not the machine running the test."""
+    sep = "\\" if platform_name == "nt" else "/"
+    return directory.rstrip("\\/") + sep + name
+
+
 def resolve_node_executable(node_bin: str, platform_name: str | None = None) -> str:
     """Return the node binary path.
 
     ``node_bin`` may be the directory that contains Node (``NODE_BIN`` in the
     Linux wrapper) or the executable itself. On Windows the file is
-    ``node.exe``. A directory is never joined twice.
+    ``node.exe``. A directory is never joined twice. When ``platform_name`` is
+    set, the separator follows that platform so a Windows test can describe a
+    POSIX layout and the reverse.
     """
     if not node_bin or node_bin.strip() != node_bin or any(c in node_bin for c in "\r\n"):
         raise ValueError("NODE_BIN is empty or contains a newline")
     expanded = os.path.expanduser(node_bin)
     plat = platform_name if platform_name is not None else os.name
     exe_name = "node.exe" if plat == "nt" else "node"
-    base = os.path.basename(expanded.rstrip("\\/"))
+    base = _basename(expanded)
     if base == "node" or base.lower() == "node.exe":
         return expanded
     if platform_name is None and os.path.isdir(expanded):
         return os.path.join(expanded, exe_name)
-    # Missing directory, or a platform we are only quoting for tests.
-    if platform_name is not None and not expanded.lower().endswith(exe_name):
-        return os.path.join(expanded, exe_name) if not os.path.basename(expanded) == exe_name else expanded
-    if os.path.isdir(expanded) or not os.path.splitext(base)[1]:
-        return os.path.join(expanded, exe_name)
-    return expanded
+    return _join(expanded, exe_name, plat)
 
 
 def node_argv(node_bin: str, mcp_js: str, platform_name: str | None = None) -> list[str]:

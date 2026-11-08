@@ -22,16 +22,22 @@ DUMMY_BRIDGE = "DUMMY-BRIDGE-SECRET-VALUE"
 DUMMY_AUTH = "DUMMY-ENDPOINT-AUTH-SECRET"
 
 
+def test_windows_npm_cmd_is_started_through_cmd_exe_without_shell():
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from build_pinned_mcp import tool_command
+
+    argv = tool_command(r"C:\Program Files\nodejs\npm.cmd", ["ci", "--no-audit", "--no-fund"], "nt")
+    assert argv[:4] == ["cmd.exe", "/d", "/s", "/c"]
+    assert "npm.cmd" in argv[4]
+    assert "ci" in argv[4]
+    assert "--no-fund" in argv[4]
+    assert tool_command("/usr/bin/npm", ["ci"], "posix") == ["/usr/bin/npm", "ci"]
+
+
 def test_node_directory_and_executable_on_both_platforms():
-    assert resolve_node_executable(r"C:\Program Files\nodejs", "nt").endswith(r"nodejs\node.exe") or resolve_node_executable(
-        r"C:\Program Files\nodejs", "nt"
-    ).endswith("nodejs/node.exe")
-    windows_dir = resolve_node_executable(r"C:\Program Files\nodejs", "nt")
-    assert windows_dir.endswith("node.exe")
-    assert " " in windows_dir
+    assert resolve_node_executable(r"C:\Program Files\nodejs", "nt") == r"C:\Program Files\nodejs\node.exe"
     assert resolve_node_executable(r"C:\Program Files\nodejs\node.exe", "nt") == r"C:\Program Files\nodejs\node.exe"
-    posix_dir = resolve_node_executable("/usr/local/bin", "posix")
-    assert posix_dir == "/usr/local/bin/node"
+    assert resolve_node_executable("/usr/local/bin", "posix") == "/usr/local/bin/node"
     assert resolve_node_executable("/usr/local/bin/node", "posix") == "/usr/local/bin/node"
     argv = node_argv(r"C:\Program Files\nodejs", r"C:\Users\box\mcp\build\index.js", "nt")
     assert argv[0].endswith("node.exe")
