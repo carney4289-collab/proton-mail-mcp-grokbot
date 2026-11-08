@@ -11,6 +11,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
 
+from connector.backend import BackendError
 from connector.http_gateway import McpHttpGateway, parse_bearer, validate_extra_hosts  # noqa: E402
 from proton_mail_mcp_policy import (  # noqa: E402
     READ_TOOL_ORDER,
@@ -454,3 +455,61 @@ def test_backend_failure_response_does_not_echo_the_secret():
         assert gateway.spawns == 0
     finally:
         gateway.shutdown()
+
+
+def test_tools_call_backend_error_is_named_without_the_secret():
+    class TimedOut(MockBackend):
+        def exchange(self, message: dict) -> dict | None:
+            if message.get("method") == "tools/call":
+                raise BackendError("backend timed out")
+            return super().exchange(message)
+
+    class Leaks(MockBackend):
+        def exchange(self, message: dict) -> dict | None:
+            if message.get("method") == "tools/call":
+                raise BackendError(DUMMY_BRIDGE)
+            return super().exchange(message)
+
+    def run(backend_cls: type[MockBackend]) -> bytes:
+        def factory():
+            return backend_cls("1", list(ALL_32))
+
+        gateway = McpHttpGateway(
+            auth_token=DUMMY_AUTH,
+            backend_factory=factory,
+            policy_env=full_function_env(),
+            bind_host="127.0.0.1",
+            bind_port=0,
+            secrets=(DUMMY_BRIDGE, DUMMY_AUTH),
+        )
+        gateway.start()
+        try:
+            status, headers, _ = _request(
+                gateway.endpoint,
+                token=DUMMY_AUTH,
+                body={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            )
+            assert status == 200
+            session = headers.get("Mcp-Session-Id") or headers.get("mcp-session-id")
+            status, _, body = _request(
+                gateway.endpoint,
+                token=DUMMY_AUTH,
+                session=session,
+                body={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "read_message", "arguments": {"uid": 5359}},
+                },
+            )
+            assert status == 502
+            return body
+        finally:
+            gateway.shutdown()
+
+    timed = run(TimedOut)
+    assert b"backend timed out" in timed
+    assert DUMMY_BRIDGE.encode() not in timed
+    leaked = run(Leaks)
+    assert DUMMY_BRIDGE.encode() not in leaked
+    assert b"backend failure" in leaked

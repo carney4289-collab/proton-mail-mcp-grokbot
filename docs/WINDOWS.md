@@ -47,7 +47,7 @@ python scripts/build_pinned_mcp.py
 
 That clones `sethbang/proton-mail-mcp` at
 `db671d9592f85b3b4f4ae6c32a27021258332abc`, copies `patches/harden.ts`,
-applies the five documented patches, and runs `npm ci`. Output:
+applies the six documented patches, and runs `npm ci`. Output:
 
 ```text
 build/proton-mail-mcp/build/index.js

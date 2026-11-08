@@ -22,6 +22,7 @@ PATCHES = [
     "harden-imap-service.patch",
     "harden-index.patch",
     "harden-validation.patch",
+    "list-date-order.patch",
 ]
 
 

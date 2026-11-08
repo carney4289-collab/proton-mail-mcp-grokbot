@@ -13,6 +13,7 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from connector.backend import BackendError
 from connector.redact import redact
 from connector.secrets import tokens_equal
 from proton_mail_mcp_policy import apply_call_guards, is_hidden_tool
@@ -335,6 +336,14 @@ class McpHttpGateway:
             with session.lock:
                 session.last_used = time.monotonic()
                 response = session.backend.exchange(message)
+        except BackendError as exc:
+            self.log(f"backend error during {method}")
+            detail = str(exc)
+            if detail and all(not secret or secret not in detail for secret in self._secrets):
+                self._send(handler, 502, {"error": detail})
+            else:
+                self._send(handler, 502, {"error": "backend failure"})
+            return
         except Exception:
             self.log(f"backend error during {method}")
             self._send(handler, 502, {"error": "backend failure"})
