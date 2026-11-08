@@ -1,0 +1,131 @@
+# Windows loopback connector
+
+Proton Mail Bridge stays on the Windows PC. IMAP `127.0.0.1:1143` and SMTP
+`127.0.0.1:1025` are not published. Grok Bot, which runs on its own Linux
+box, cannot be given the Bridge password. It later reaches only an
+authenticated HTTP MCP endpoint on this PC.
+
+This repository does not install Bridge, log in, create a Windows service,
+or open a firewall rule.
+
+## What runs where
+
+```
+Grok Bot (Linux)  -- later, private HTTPS, not set up here -->
+Windows 127.0.0.1:8765  proton-mail-mcp-http.py
+    bearer token from Windows Credential Manager (proton-mail-mcp:http-auth)
+    Node build/index.js
+        Bridge IMAP password from Credential Manager (proton-mail-mcp:bridge-imap)
+        only inside the Node process environment, never on argv
+    Proton Bridge on this same PC, localhost only
+```
+
+The PC has to stay awake, online, and unlocked far enough for Bridge and
+this process to keep running. Message text the bot reads is decrypted by
+Bridge and returned to the bot, so it leaves the PC.
+
+Registering the 32 tools, or accepting the bearer token, does not ask a
+person before send, reply, forward, draft, move, delete, flag, label,
+folder, bulk, or thread calls. Asking first is an assistant rule. It is
+not enforced by this process. `empty_folder` still has the upstream
+`confirm: true` argument, which the client can fill in by itself.
+
+## Build the Node server
+
+On a machine with Node 24, Python 3, git, and npm:
+
+```text
+python scripts/build_pinned_mcp.py
+```
+
+That clones `sethbang/proton-mail-mcp` at
+`db671d9592f85b3b4f4ae6c32a27021258332abc`, copies `patches/harden.ts`,
+applies the five documented patches, and runs `npm ci`. Output:
+
+```text
+build/proton-mail-mcp/build/index.js
+```
+
+Copy that directory to the PC, for example
+`C:\Users\YOU\AppData\Local\proton-mail-mcp\`. The `build/` tree is not
+committed.
+
+`PROTONMAIL_ALLOWED_ACTIONS=ALL` and `*` mean every mutating tool, in both
+the Python policy and `harden.ts`. A comma list of real tool names still
+restricts. Send tools also need `PROTONMAIL_ALLOW_SEND=true`.
+`empty_folder` also needs `ALLOW_EMPTY_FOLDER=true`.
+
+## Secrets
+
+Two different secrets, both in Windows Credential Manager. Neither is a
+parameter, an env file value, or a git object.
+
+```text
+powershell -File scripts\windows\store-credential.ps1 -Name bridge-imap
+powershell -File scripts\windows\store-credential.ps1 -Name http-auth
+```
+
+`bridge-imap` is the IMAP password Bridge shows after login. It is not the
+Proton account password. `http-auth` is a separate random bearer token of
+at least 16 characters. The connector refuses to start if either is
+missing, if the bearer is shorter than 16 characters, or if the two values
+are the same. The bearer is what Grok Bot will send later. The Bridge
+password is never put in the Grok Bot registration.
+
+## Non-secret config
+
+```text
+copy config\windows.env.example config\windows.env
+```
+
+Edit account username, `NODE_BIN`, `MCP_JS`, and the attachment directory.
+The example enables the full 32-tool surface on purpose. `config/windows.env`
+is gitignored. The starter script refuses any line whose name contains
+`PASSWORD`, `SECRET`, `TOKEN`, or `AUTH`.
+
+`NODE_BIN` is the directory that contains `node.exe`
+(`C:\Program Files\nodejs` when that is where Node 24 is installed). It may
+instead be the full path of `node.exe`. The Linux wrapper still accepts a
+directory and now also accepts the `node` binary path.
+
+Mail hosts other than `127.0.0.1`, `localhost`, and `::1` are rejected at
+startup.
+
+## Start and stop
+
+```text
+powershell -File scripts\windows\start-proton-mail-mcp.ps1
+```
+
+The process listens on `127.0.0.1` and the port in `BIND_PORT` (8765 unless
+changed). Ctrl+C stops it and closes Node children. There is no service and
+no scheduled task. Rollback is in `docs/ROLLBACK.md`.
+
+A client sends MCP Streamable HTTP `POST` to `http://127.0.0.1:8765/mcp`:
+
+- `Authorization: Bearer <http-auth secret>`
+- `Accept: application/json, text/event-stream`
+- `Content-Type: application/json`
+- one JSON-RPC object per POST
+- the `Mcp-Session-Id` returned by `initialize` on later requests
+
+Missing, malformed, or wrong bearer tokens get HTTP 401 and do not start
+Node. `GET` (the optional 2025 server stream) returns 405. `DELETE` with
+the session id closes that session's Node process. A 2025 client keeps one
+Node process per `Mcp-Session-Id`. A 2026 client does not send that header,
+so each of its POSTs gets its own short-lived Node process. Requests are
+limited to 8 MiB. An idle published session is closed.
+`Origin`, when present, must be the loopback origin. `Host` must be the
+loopback host and port. Tailscale user headers are not accepted as
+authorization.
+
+`PROTON_MCP_EXTRA_HOSTS` is empty unless a later Tailscale proxy preserves a
+non-loopback Host header. It does not replace the bearer token. Wildcards
+and `0.0.0.0` are rejected.
+
+## Grok Bot registration, later
+
+Do this only after the private HTTPS path in `docs/TAILSCALE-LATER.md` is
+separately authorized. The registration URL is the tailnet HTTPS URL. The
+static header is `Authorization: Bearer <http-auth secret>`. Do not put
+`IMAP_PASSWORD` or `PROTONMAIL_PASSWORD` in that registration.

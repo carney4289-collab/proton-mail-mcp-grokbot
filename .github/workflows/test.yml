@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install -r requirements-dev.txt
+      - name: Unit tests
+        run: python -m pytest tests/unit -q --tb=short
+
+  integration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pytest
+        run: python -m pip install -r requirements-dev.txt
+      - name: Build pinned proton-mail-mcp
+        run: python scripts/build_pinned_mcp.py
+      - name: Protocol tests against the patched build
+        run: python -m pytest tests/integration -q --tb=short
+        env:
+          PROTON_MCP_JS: build/proton-mail-mcp/build/index.js

@@ -12,6 +12,13 @@ user.
 The stdio wrapper is an NDJSON JSON-RPC **proxy** (not `execv`). It hides send
 tools unless you opt in, and it can folder-gate mailbox access.
 
+Windows, when Bridge is already installed on that PC, uses a different
+process: `scripts/proton-mail-mcp-http.py` listens on `127.0.0.1` only,
+authenticates with a separate bearer token, and speaks MCP Streamable HTTP
+to the same patched Node server. See `docs/WINDOWS.md`. Tailscale is not
+part of this setup; `docs/TAILSCALE-LATER.md` is the later step. Listing a
+tool is not approval to call it.
+
 ## Why
 
 Proton's web UI and unofficial HTTP scrapers chew through API quota and break
@@ -139,7 +146,7 @@ Optional SHA-256 pin of the Bridge STARTTLS cert: `PROTONMAIL_BRIDGE_CERT_SHA256
 9. Set `PROTONMAIL_USERNAME`, then run `scripts/proton-bridge-login.sh` (this stops any supervised Bridge first so the lock is free).
 10. After Bridge info, store the IMAP password with pass under the key `proton-bridge/imap` (`pass insert -e`). Never put it in git or MCP env files.
 11. Start the stack with `scripts/start-proton-stack.sh`.
-12. Register the MCP with Grok Bot (example below). Keep the wrapper and `proton_mail_mcp_policy.py` in the same directory.
+12. Register the MCP with Grok Bot (example below). Keep the wrapper, `proton_mail_mcp_policy.py`, and the `scripts/connector/` package in the same scripts directory. `PROTONMAIL_ALLOWED_ACTIONS=ALL` (or `*`) means every mutating tool; a comma list of real tool names still restricts.
 
 ## Grok Bot AddMcpServer example
 

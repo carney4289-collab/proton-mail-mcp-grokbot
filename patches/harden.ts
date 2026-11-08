@@ -2,8 +2,11 @@
  * Deployment harden layer for the local Proton Mail MCP.
  *
  * Gated by env (wrapper supplies defaults). When an env var is unset, folder
- * and action allowlists are inactive so unit tests keep the upstream surface;
- * ALLOW_SEND is fail-closed (missing/false → send-family tools are not registered).
+ * and action allowlists are inactive so unit tests keep the upstream surface.
+ * `*` and `ALL` in PROTONMAIL_ALLOWED_ACTIONS mean every mutating tool, the
+ * same way PROTONMAIL_ALLOWED_FOLDERS treats those tokens. A comma list of
+ * real tool names still restricts. ALLOW_SEND is fail-closed (missing/false
+ * → send-family tools are not registered).
  */
 import { createHash } from "node:crypto";
 import type { ConnectionOptions, PeerCertificate, TLSSocket } from "node:tls";
@@ -99,7 +102,12 @@ export function allowSendEnabled(): boolean {
 }
 
 export function getAllowedActions(): string[] | null {
-  return parseCommaList(process.env.PROTONMAIL_ALLOWED_ACTIONS);
+  const items = parseCommaList(process.env.PROTONMAIL_ALLOWED_ACTIONS);
+  if (!items) return null;
+  // Match getAllowedFolders and the Python policy. The literal token must
+  // not be treated as a tool name, or every mutating tool stays unregistered.
+  if (items.some((i) => i === "*" || i.toUpperCase() === "ALL")) return null;
+  return items;
 }
 
 export function getAllowedFolders(): string[] | null {
