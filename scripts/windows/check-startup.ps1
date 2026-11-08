@@ -10,7 +10,6 @@ Write-Output "task: $name"
 if (-not $existing) {
     Write-Output "installed: no"
 } else {
-    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     $principal = $existing.Principal
     $trigger = @($existing.Triggers)[0]
     $settings = $existing.Settings
@@ -27,7 +26,7 @@ if (-not $existing) {
     Write-Output ("multiple-instances: " + [string]$settings.MultipleInstances)
     Write-Output ("restart-count: " + [string]$settings.RestartCount)
     Write-Output ("execution-limit: " + [string]$settings.ExecutionTimeLimit)
-    if ([string]$principal.UserId -eq $identity) {
+    if (Test-ProtonCurrentUser -Stored ([string]$principal.UserId)) {
         Write-Output "user: current-user"
     } elseif ([string]$principal.UserId -eq "SYSTEM") {
         Write-Output "user: SYSTEM"

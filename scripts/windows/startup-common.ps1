@@ -104,6 +104,20 @@ function Assert-ProtonStartupConfig {
     }
 }
 
+function Test-ProtonCurrentUser {
+    param([string]$Stored)
+    if (-not $Stored) { return $false }
+    if ($Stored -match '^(?i)(SYSTEM|LOCAL SERVICE|NETWORK SERVICE|NT AUTHORITY\\.+)$') { return $false }
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $name = [string]$identity.Name
+    if ($Stored -ieq $name) { return $true }
+    if ($Stored -eq [string]$identity.User.Value) { return $true }
+    $simple = $name.Split('\')[-1]
+    $storedSimple = $Stored.Split('\')[-1]
+    if ($simple -and $storedSimple -ieq $simple) { return $true }
+    return $false
+}
+
 function Get-ProtonLogonWrapperPath {
     return (Join-Path $PSScriptRoot "run-at-logon.ps1")
 }
@@ -140,7 +154,6 @@ function Get-ProtonLogonTaskMismatch {
     $root = Get-ProtonPackageRoot
     $expectedArg = Get-ProtonLogonArgument
     $powerShell = Get-ProtonLogonPowerShell
-    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     if (@($Task.Actions).Count -ne 1) { return "action-count" }
     $action = @($Task.Actions)[0]
     if ($action.Execute -ine $powerShell) { return "execute" }
@@ -148,7 +161,7 @@ function Get-ProtonLogonTaskMismatch {
     $actualDir = ([string]$action.WorkingDirectory).TrimEnd('\')
     if ($actualDir -and ($actualDir -ine $root.TrimEnd('\'))) { return "working-directory" }
     $principal = $Task.Principal
-    if ($principal.UserId -ine $identity) { return "user" }
+    if (-not (Test-ProtonCurrentUser -Stored ([string]$principal.UserId))) { return "user" }
     $logon = [string]$principal.LogonType
     if ($logon -ne "Interactive" -and $logon -ne "3") { return "logon=$logon" }
     $level = [string]$principal.RunLevel
@@ -162,7 +175,7 @@ function Get-ProtonLogonTaskMismatch {
         return "delay=" + [string]$trigger.Delay
     }
     $triggerUser = [string]$trigger.UserId
-    if ($triggerUser -and ($triggerUser -ine $identity)) { return "trigger-user" }
+    if ($triggerUser -and -not (Test-ProtonCurrentUser -Stored $triggerUser)) { return "trigger-user" }
     $settings = $Task.Settings
     $instances = [string]$settings.MultipleInstances
     if ($instances -ne "IgnoreNew" -and $instances -ne "2") { return "instances=$instances" }
