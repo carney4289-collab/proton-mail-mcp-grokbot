@@ -35,7 +35,13 @@ jobs:
             "scripts\windows\load-windows-env.ps1",
             "scripts\windows\start-proton-mail-mcp.ps1",
             "scripts\windows\check-endpoint.ps1",
-            "scripts\windows\copy-http-auth.ps1"
+            "scripts\windows\copy-http-auth.ps1",
+            "scripts\windows\startup-common.ps1",
+            "scripts\windows\run-at-logon.ps1",
+            "scripts\windows\install-logon-task.ps1",
+            "scripts\windows\remove-logon-task.ps1",
+            "scripts\windows\check-startup.ps1",
+            "scripts\windows\plan-serve-handoff.ps1"
           )
           foreach ($rel in $paths) {
             $errs = $null

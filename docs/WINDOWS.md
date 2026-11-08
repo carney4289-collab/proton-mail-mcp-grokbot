@@ -151,8 +151,9 @@ powershell -File scripts\windows\start-proton-mail-mcp.ps1
 ```
 
 The process listens on `127.0.0.1` and the port in `BIND_PORT` (8765 unless
-changed). Ctrl+C stops it and closes Node children. There is no service and
-no scheduled task. Rollback is in `docs/ROLLBACK.md`.
+changed). Ctrl+C stops it and closes Node children. This starter does not
+register a service or a scheduled task. The optional current-user logon
+task is in `docs/STARTUP.md`. Rollback is in `docs/ROLLBACK.md`.
 
 A client sends MCP Streamable HTTP `POST` to `http://127.0.0.1:8765/mcp`:
 

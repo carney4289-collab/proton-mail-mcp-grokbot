@@ -1,10 +1,22 @@
 # Rollback
 
 This connector is a user process. It does not install a Windows service,
-scheduled task, firewall rule, or Tailscale config.
+firewall rule, or Tailscale config. The optional logon task is separate
+and is removed without stopping a connector that is still running:
+
+```text
+powershell -File scripts\windows\remove-logon-task.ps1
+```
+
+That command refuses the task when its action is not this package's
+`run-at-logon.ps1`. It does not delete Credential Manager entries and it
+does not change Serve. A Serve handover that was applied by hand is undone
+with the rollback command saved in `docs/STARTUP.md`, not by rebooting.
 
 1. Stop `scripts/windows/start-proton-mail-mcp.ps1` with Ctrl+C, or end that
-   `python.exe` process. Node children for open sessions exit with it.
+   `python.exe` process, only when you want the current listener to stop.
+   Node children for open sessions exit with it. Removing the logon task
+   does not do this.
 2. If Grok Bot was pointed at the endpoint, remove that MCP registration.
    That registration must not have contained the Bridge password.
 3. Optional: delete the two Credential Manager entries

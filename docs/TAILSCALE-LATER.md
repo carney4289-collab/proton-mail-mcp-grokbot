@@ -1,7 +1,10 @@
-# Tailscale, later and not part of this change
+# Tailscale
 
 Nothing in this repository creates a Tailscale account, auth key, Serve
-config, Funnel endpoint, or ACL. Those steps need a separate authorization.
+config, Funnel endpoint, or ACL. The private Serve on
+`https://dell-sean.tail545f1e.ts.net/mcp` is already running from a
+foreground process. `docs/STARTUP.md` is the handover plan for saving that
+same mount. It does not enable Funnel and it does not change the ACL.
 
 The connector is already bound to loopback and requires its own bearer
 token. Tailscale identity headers are not treated as that token. TLS in
