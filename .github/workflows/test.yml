@@ -10,14 +10,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install pytest
         run: python -m pip install -r requirements-dev.txt
+      - name: Windows PowerShell 5.1 syntax
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Output $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -lt 5) { exit 1 }
+          $paths = @(
+            "scripts\windows\new-http-auth.ps1",
+            "scripts\windows\check-local.ps1",
+            "scripts\windows\store-credential.ps1"
+          )
+          foreach ($rel in $paths) {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $rel), [ref]$null, [ref]$errs)
+            if ($errs -and $errs.Count -gt 0) { $errs | ForEach-Object { Write-Output $_.ToString() }; exit 1 }
+          }
       - name: Unit tests
         run: python -m pytest tests/unit -q --tb=short
 

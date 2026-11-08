@@ -38,6 +38,34 @@ def decode_credential_blob(raw: bytes) -> str:
     return raw.decode("utf-8").rstrip("\x00")
 
 
+def generate_token() -> str:
+    """Cryptographically random bearer token. Caller must not print it."""
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    if len(token) < 32 or any(ch in token for ch in "\r\n\x00 "):
+        raise SecretStoreError("token generator failed")
+    return token
+
+
+def store_generated_token(store: object, logical_name: str) -> str:
+    """Write a new token. Refuses to replace an existing value or the bridge secret.
+
+    The returned token is for the caller to discard or compare in a test.
+    Command-line entry points must not write it to stdout, stderr, or a file.
+    """
+    if logical_name == BRIDGE_IMAP:
+        raise SecretStoreError("refusing to generate over the bridge credential")
+    if logical_name not in (HTTP_AUTH, "ci-dummy"):
+        raise SecretStoreError("unknown secret name")
+    existing = store.get(logical_name)  # type: ignore[attr-defined]
+    if existing:
+        raise SecretStoreError("credential already exists; not overwritten")
+    token = generate_token()
+    store.put(logical_name, token)  # type: ignore[attr-defined]
+    return token
+
+
 def tokens_equal(left: str, right: str) -> bool:
     import hashlib
     import hmac
@@ -55,10 +83,17 @@ class MemorySecretStore:
         self._values = dict(values)
 
     def get(self, logical_name: str) -> str | None:
-        if logical_name not in LOGICAL_NAMES:
+        if logical_name not in LOGICAL_NAMES and logical_name != "ci-dummy":
             raise SecretStoreError("unknown secret name")
         value = self._values.get(logical_name)
         return value if value else None
+
+    def put(self, logical_name: str, secret: str) -> None:
+        if logical_name not in LOGICAL_NAMES and logical_name != "ci-dummy":
+            raise SecretStoreError("unknown secret name")
+        if not secret or any(ch in secret for ch in "\r\n\x00"):
+            raise SecretStoreError("refusing to store an empty or multiline secret")
+        self._values[logical_name] = secret
 
 
 class PassSecretStore:

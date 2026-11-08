@@ -69,15 +69,34 @@ parameter, an env file value, or a git object.
 
 ```text
 powershell -File scripts\windows\store-credential.ps1 -Name bridge-imap
-powershell -File scripts\windows\store-credential.ps1 -Name http-auth
+powershell -File scripts\windows\new-http-auth.ps1
 ```
 
-`bridge-imap` is the IMAP password Bridge shows after login. It is not the
-Proton account password. `http-auth` is a separate random bearer token of
-at least 16 characters. The connector refuses to start if either is
-missing, if the bearer is shorter than 16 characters, or if the two values
-are the same. The bearer is what Grok Bot will send later. The Bridge
-password is never put in the Grok Bot registration.
+`store-credential.ps1 -Name bridge-imap` prompts for the IMAP password
+Bridge shows after login. It is not the Proton account password.
+`new-http-auth.ps1` generates a separate random bearer token and stores it
+as `proton-mail-mcp:http-auth`. The token is not printed, not an argument,
+and not written to a file. If that credential already exists, the script
+stops and leaves it unchanged. Delete it in Credential Manager yourself
+before generating another. Do not point `new-http-auth.ps1` at the bridge
+credential.
+
+The connector refuses to start if either secret is missing, if the bearer
+is shorter than 16 characters, or if the two values are the same. The
+bearer is what a later Grok Bot registration would send. The Bridge
+password is never put in that registration.
+
+After both secrets are stored, a local check can start a temporary
+loopback listener, run `initialize` and `tools/list`, and exit. It does
+not send `tools/call`:
+
+```text
+powershell -File scripts\windows\check-local.ps1
+```
+
+The Node process may still make its existing non-fatal SMTP connectivity
+check to `127.0.0.1:1025`. That is not a mailbox command. The check prints
+the protocol version and tool names only.
 
 ## Non-secret config
 
