@@ -131,10 +131,40 @@ function Get-ProtonLogonArgument {
     return '-NoProfile -NonInteractive -File "' + $wrapper + '"'
 }
 
+function Get-ProtonEffectiveExecutionPolicy {
+    try {
+        $cmdlet = Get-Command Get-ExecutionPolicy -ErrorAction Stop
+        if ($cmdlet) {
+            return [string](& $cmdlet -ErrorAction Stop)
+        }
+    } catch {
+        # -NoProfile can fail to autoload the security module. The registry
+        # values below are the saved policy. They are not changed here.
+    }
+    $keys = @(
+        "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell",
+        "HKCU:\SOFTWARE\Policies\Microsoft\Windows\PowerShell",
+        "HKCU:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell",
+        "HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell"
+    )
+    foreach ($key in $keys) {
+        try {
+            $item = Get-ItemProperty -Path $key -Name ExecutionPolicy -ErrorAction Stop
+        } catch {
+            continue
+        }
+        $value = [string]$item.ExecutionPolicy
+        if ($value -and $value -ne "Undefined") {
+            return $value
+        }
+    }
+    return "Undefined"
+}
+
 function Assert-ProtonScriptPolicy {
     param([Parameter(Mandatory = $true)][string[]]$Paths)
-    $effective = [string](Get-ExecutionPolicy)
-    if ($effective -eq "Restricted" -or $effective -eq "AllSigned") {
+    $effective = Get-ProtonEffectiveExecutionPolicy
+    if ($effective -eq "Restricted" -or $effective -eq "AllSigned" -or $effective -eq "Undefined") {
         throw "Windows PowerShell execution policy is $effective. The logon task was not registered. This installer does not change execution policy and does not unblock files."
     }
     foreach ($path in $Paths) {
