@@ -16,6 +16,7 @@ import sys
 from typing import Any, BinaryIO
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from connector.launch import resolve_node_executable  # noqa: E402
 from proton_mail_mcp_policy import (  # noqa: E402
     DEFAULT_ALLOWED_ACTIONS,
     DEFAULT_ALLOWED_FOLDERS,
@@ -256,7 +257,7 @@ def main() -> None:
     _load_password()
     os.makedirs(os.environ["ALLOW_FILE_DOWNLOAD_DIR"], mode=0o700, exist_ok=True)
 
-    node = os.path.join(NODE_BIN, "node")
+    node = resolve_node_executable(NODE_BIN)
     child = subprocess.Popen(
         [node, MCP_JS],
         stdin=subprocess.PIPE,

@@ -1,0 +1,75 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  unit:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: python -m pip install -r requirements-dev.txt
+      - name: Windows PowerShell 5.1 syntax
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Output $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -lt 5) { exit 1 }
+          $paths = @(
+            "scripts\windows\new-http-auth.ps1",
+            "scripts\windows\check-local.ps1",
+            "scripts\windows\store-credential.ps1",
+            "scripts\windows\load-windows-env.ps1",
+            "scripts\windows\start-proton-mail-mcp.ps1",
+            "scripts\windows\check-endpoint.ps1",
+            "scripts\windows\copy-http-auth.ps1",
+            "scripts\windows\startup-common.ps1",
+            "scripts\windows\run-at-logon.ps1",
+            "scripts\windows\install-logon-task.ps1",
+            "scripts\windows\remove-logon-task.ps1",
+            "scripts\windows\check-startup.ps1",
+            "scripts\windows\plan-serve-handoff.ps1"
+          )
+          foreach ($rel in $paths) {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $rel), [ref]$null, [ref]$errs)
+            if ($errs -and $errs.Count -gt 0) { $errs | ForEach-Object { Write-Output $_.ToString() }; exit 1 }
+          }
+      - name: Unit tests
+        run: python -m pytest tests/unit -q --tb=short
+
+  integration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Install pytest
+        run: python -m pip install -r requirements-dev.txt
+      - name: Build pinned proton-mail-mcp
+        run: python scripts/build_pinned_mcp.py
+      - name: Protocol tests against the patched build
+        run: python -m pytest tests/integration -q --tb=short
+        env:
+          PROTON_MCP_JS: build/proton-mail-mcp/build/index.js

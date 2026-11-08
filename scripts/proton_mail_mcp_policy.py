@@ -7,47 +7,48 @@ from __future__ import annotations
 
 SEND_TOOLS = frozenset({"send_email", "reply_email", "reply_all_email", "forward_email"})
 
-READ_TOOLS = frozenset(
-    {
-        "list_folders",
-        "list_messages",
-        "read_message",
-        "list_attachments",
-        "download_attachment",
-        "search_messages",
-        "get_thread",
-        "count_messages",
-        "folder_stats",
-        "top_senders",
-    }
+# Stable order matches patches/harden.ts. frozenset membership stays the gate.
+READ_TOOL_ORDER = (
+    "list_folders",
+    "list_messages",
+    "read_message",
+    "list_attachments",
+    "download_attachment",
+    "search_messages",
+    "get_thread",
+    "count_messages",
+    "folder_stats",
+    "top_senders",
 )
 
-MUTATING_TOOLS = frozenset(
-    {
-        "send_email",
-        "reply_email",
-        "reply_all_email",
-        "forward_email",
-        "save_draft",
-        "move_message",
-        "delete_message",
-        "update_message_flags",
-        "mark_all_read",
-        "bulk_move",
-        "bulk_delete",
-        "bulk_update_flags",
-        "create_folder",
-        "create_label",
-        "rename_folder",
-        "delete_folder",
-        "update_message_labels",
-        "bulk_update_labels",
-        "empty_folder",
-        "move_thread",
-        "delete_thread",
-        "flag_thread",
-    }
+MUTATING_TOOL_ORDER = (
+    "send_email",
+    "reply_email",
+    "reply_all_email",
+    "forward_email",
+    "save_draft",
+    "move_message",
+    "delete_message",
+    "update_message_flags",
+    "mark_all_read",
+    "bulk_move",
+    "bulk_delete",
+    "bulk_update_flags",
+    "create_folder",
+    "create_label",
+    "rename_folder",
+    "delete_folder",
+    "update_message_labels",
+    "bulk_update_labels",
+    "empty_folder",
+    "move_thread",
+    "delete_thread",
+    "flag_thread",
 )
+
+READ_TOOLS = frozenset(READ_TOOL_ORDER)
+MUTATING_TOOLS = frozenset(MUTATING_TOOL_ORDER)
+FULL_ACTION_LIST = ",".join(MUTATING_TOOL_ORDER)
 
 WRITE_TOOLS_NEED_FOLDER = frozenset(
     {
@@ -126,6 +127,13 @@ DEFAULT_ALLOWED_FOLDERS = "*"
 
 
 def parse_comma_list(raw: str | None) -> list[str] | None:
+    """Split a comma list.
+
+    ``*`` and ``ALL`` (any case) mean unrestricted for both folders and
+    actions. Node ``getAllowedActions`` uses the same rule. A list that
+    names real tools still restricts. ``ALL`` must not be stored as a
+    literal tool name.
+    """
     if raw is None:
         return None
     items = [s.strip() for s in raw.split(",") if s.strip()]
@@ -202,12 +210,41 @@ def is_hidden_tool(name: str, environ: dict[str, str] | None = None) -> bool:
     import os
 
     env = environ if environ is not None else os.environ
+    # Node registers empty_folder only when ALLOW_EMPTY_FOLDER=true, even if
+    # the name is on the action list. Mirror that here.
+    if name == "empty_folder" and env.get("ALLOW_EMPTY_FOLDER") != "true":
+        return True
     return not may_register_tool(
         name,
         readonly=env.get("READONLY") == "true",
         allow_send=env.get("PROTONMAIL_ALLOW_SEND") == "true",
         allowed_actions=parse_comma_list(env.get("PROTONMAIL_ALLOWED_ACTIONS")),
     )
+
+
+def visible_tool_names(environ: dict[str, str] | None = None) -> list[str]:
+    """Tool names the policy would show, in harden.ts order."""
+    names = list(READ_TOOL_ORDER) + list(MUTATING_TOOL_ORDER)
+    return [name for name in names if not is_hidden_tool(name, environ)]
+
+
+def full_function_env(username: str = "fake-user@example.invalid") -> dict[str, str]:
+    """Deliberate full-tool configuration. This is not approval to call them."""
+    return {
+        "READONLY": "false",
+        "PROTONMAIL_ALLOW_SEND": "true",
+        "PROTONMAIL_ALLOWED_ACTIONS": FULL_ACTION_LIST,
+        "PROTONMAIL_ALLOWED_FOLDERS": "*",
+        "ALLOW_EMPTY_FOLDER": "true",
+        "RESTRICT_OUTBOUND_TO_SELF": "false",
+        "PROTONMAIL_USERNAME": username,
+        "IMAP_HOST": "127.0.0.1",
+        "IMAP_PORT": "1143",
+        "IMAP_SECURE": "false",
+        "PROTONMAIL_HOST": "127.0.0.1",
+        "PROTONMAIL_PORT": "1025",
+        "PROTONMAIL_SECURE": "false",
+    }
 
 
 def apply_call_guards(
