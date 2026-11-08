@@ -70,6 +70,14 @@ def test_child_env_ignores_password_planted_in_the_parent_map():
     assert env["PROTONMAIL_PASSWORD"] == DUMMY_BRIDGE
 
 
+def test_windows_child_env_keeps_system_root_so_node_can_start():
+    if os.name != "nt":
+        pytest.skip("SYSTEMROOT is a Windows process requirement")
+    env = child_environment({"PROTONMAIL_USERNAME": "fake-user@example.invalid"}, DUMMY_BRIDGE)
+    assert env.get("SYSTEMROOT")
+    assert env.get("PATH")
+
+
 def test_defaults_do_not_enable_send():
     env = child_environment({"PROTONMAIL_USERNAME": "fake-user@example.invalid"}, DUMMY_BRIDGE)
     assert env["PROTONMAIL_ALLOW_SEND"] == "false"

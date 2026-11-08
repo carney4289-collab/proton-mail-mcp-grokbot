@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 from connector.backend import StdioBackend  # noqa: E402
 from connector.http_gateway import McpHttpGateway  # noqa: E402
 from connector.launch import node_argv  # noqa: E402
+from connector.runtime_env import child_environment  # noqa: E402
 from proton_mail_mcp_policy import (  # noqa: E402
     READ_TOOL_ORDER,
     full_function_env,
@@ -48,17 +49,11 @@ def _node() -> str:
 
 
 def _base_env() -> dict[str, str]:
-    env = full_function_env()
-    env.update(
-        {
-            "PROTONMAIL_PASSWORD": DUMMY_BRIDGE,
-            "IMAP_PASSWORD": DUMMY_BRIDGE,
-            "IMAP_PORT": "1",
-            "PROTONMAIL_PORT": "1",
-            "PATH": os.environ.get("PATH", ""),
-        }
-    )
-    return env
+    """Full-tool child env. On Windows this must keep SYSTEMROOT or Node aborts in CSPRNG."""
+    source = full_function_env()
+    source["IMAP_PORT"] = "1"
+    source["PROTONMAIL_PORT"] = "1"
+    return child_environment(source, DUMMY_BRIDGE)
 
 
 def _read_line(proc: subprocess.Popen, timeout: float = 20.0) -> dict:
@@ -304,18 +299,17 @@ def test_official_streamable_http_client_both_eras():
     shutil.copyfile(probe, probe_copy)
     try:
         for era in ("legacy", "modern"):
+            probe_env = os.environ.copy()
+            probe_env["MCP_URL"] = gateway.endpoint
+            probe_env["MCP_HTTP_TOKEN"] = DUMMY_AUTH
+            probe_env["MCP_ERA"] = era
             proc = subprocess.run(
                 [_node(), probe_copy],
                 check=False,
                 capture_output=True,
                 text=True,
                 cwd=client_root,
-                env={
-                    "PATH": os.environ.get("PATH", ""),
-                    "MCP_URL": gateway.endpoint,
-                    "MCP_HTTP_TOKEN": DUMMY_AUTH,
-                    "MCP_ERA": era,
-                },
+                env=probe_env,
             )
             assert proc.returncode == 0, proc.stderr
             assert DUMMY_AUTH not in proc.stdout
