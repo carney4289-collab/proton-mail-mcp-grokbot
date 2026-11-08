@@ -20,6 +20,7 @@ if ($env:PROTON_MCP_BRIDGE_WAIT_SECONDS) {
 $ready = Wait-ProtonBridgePorts -Seconds $wait
 if (-not $ready) {
     Write-Output "bridge ports 127.0.0.1:1143 and 127.0.0.1:1025 were not both open; connector was not started"
+    Write-Output "Bridge Open on startup was not verified. This script does not change Bridge settings."
     exit 1
 }
 

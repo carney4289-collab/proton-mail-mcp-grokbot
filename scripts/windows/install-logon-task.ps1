@@ -12,6 +12,12 @@ Assert-ProtonStartupConfig -Path (Join-Path $root "config\windows.env")
 $name = Get-ProtonLogonTaskName
 $wrapper = Get-ProtonLogonWrapperPath
 if (-not (Test-Path -LiteralPath $wrapper)) { throw "missing run-at-logon.ps1" }
+Assert-ProtonScriptPolicy -Paths @(
+    $wrapper,
+    (Join-Path $PSScriptRoot "startup-common.ps1"),
+    (Join-Path $PSScriptRoot "start-proton-mail-mcp.ps1"),
+    (Join-Path $PSScriptRoot "load-windows-env.ps1")
+)
 $expectedArg = Get-ProtonLogonArgument
 $powerShell = Get-ProtonLogonPowerShell
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -41,5 +47,6 @@ if ($createdReason) {
     Unregister-ScheduledTask -TaskName $name -Confirm:$false
     throw "logon task did not match the required definition ($createdReason) and was removed"
 }
+Write-Output "Bridge Open on startup was not checked. Enable it in Bridge Settings if it is off. This installer does not change Bridge."
 Write-Output "logon task installed"
 exit 0

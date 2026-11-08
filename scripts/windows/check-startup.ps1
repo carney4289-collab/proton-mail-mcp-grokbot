@@ -47,6 +47,8 @@ function Write-Port {
 Write-Port -Label "connector-port 127.0.0.1:8765" -Port 8765
 Write-Port -Label "imap-port 127.0.0.1:1143" -Port 1143
 Write-Port -Label "smtp-port 127.0.0.1:1025" -Port 1025
+Write-Output "bridge-autostart: not-verified"
+Write-Output ("execution-policy: " + [string](Get-ExecutionPolicy))
 Write-Output "serve-handoff: not changed"
 $check = Join-Path $PSScriptRoot "check-endpoint.ps1"
 Write-Output "protocol-check: powershell -NoProfile -File `"$check`" -Endpoint `"https://dell-sean.tail545f1e.ts.net/mcp`""

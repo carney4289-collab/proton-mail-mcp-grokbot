@@ -54,17 +54,28 @@ def test_serve_plan_is_exact_and_does_not_publish():
         "tailscale",
         "serve",
         "--bg",
+        "--https=443",
         "--set-path=/mcp",
         "http://127.0.0.1:8765/mcp",
     )
-    assert ROLLBACK_COMMAND[-1] == "off"
-    assert "funnel" not in " ".join(APPLY_COMMAND)
+    assert ROLLBACK_COMMAND == (
+        "tailscale",
+        "serve",
+        "--https=443",
+        "--set-path=/mcp",
+        "off",
+    )
+    assert "funnel" not in " ".join(APPLY_COMMAND + ROLLBACK_COMMAND)
+    assert "reset" not in " ".join(APPLY_COMMAND + ROLLBACK_COMMAND)
     assert "--yes" not in APPLY_COMMAND
     empty = plan_serve_handoff("No serve config", "{}")
     text = format_plan(empty)
-    assert "apply: tailscale serve --bg --set-path=/mcp http://127.0.0.1:8765/mcp" in text
-    assert "rollback: tailscale serve --bg --set-path=/mcp off" in text
-    assert "does not change Tailscale" in text
+    assert "apply: tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8765/mcp" in text
+    assert "rollback: tailscale serve --https=443 --set-path=/mcp off" in text
+    assert "read: tailscale serve status" in text
+    assert "read: tailscale serve status --json" in text
+    assert "does not reset other Serve handlers" in text
+    assert "serve reset" not in text.lower()
     assert "does not stop a process" in text
     assert PUBLIC_HTTPS in text
     assert BACKEND in text
@@ -131,9 +142,20 @@ def test_startup_scripts_do_not_kill_processes_or_widen_the_network():
         )
     )
     lowered = combined.lower()
-    for banned in ("stop-process", "taskkill", "tailscale funnel", "-password", "schtasks"):
+    for banned in (
+        "stop-process",
+        "taskkill",
+        "tailscale funnel",
+        "-password",
+        "schtasks",
+        " -executionpolicy",
+        "unblock-file",
+        "set-executionpolicy",
+    ):
         if banned in lowered:
             raise AssertionError("startup helper contains " + banned)
+    if " bypass" in lowered:
+        raise AssertionError("startup helper contains a policy bypass")
     assert "LogonType Interactive" in combined
     assert "RunLevel Limited" in combined
     assert "IgnoreNew" in combined
@@ -221,6 +243,8 @@ def test_logon_task_install_check_and_remove_on_windows():
         installed = _run_ps("install-logon-task.ps1", [])
         assert installed.returncode == 0, installed.stderr
         assert "logon task installed" in installed.stdout
+        assert "Bridge Open on startup was not checked" in installed.stdout
+        assert "does not change Bridge" in installed.stdout
         if fixture_user in installed.stdout or fixture_user in installed.stderr:
             raise AssertionError("config value appeared in install output")
         again = _run_ps("install-logon-task.ps1", [])
@@ -237,10 +261,12 @@ def test_logon_task_install_check_and_remove_on_windows():
             "restart-count: 3",
             "execution-limit: PT0S",
             "user: current-user",
+            "bridge-autostart: not-verified",
             "serve-handoff: not changed",
             "https://dell-sean.tail545f1e.ts.net/mcp",
         ):
             assert line in checked.stdout
+        assert "execution-policy: " in checked.stdout
         if fixture_user in checked.stdout or "Bearer" in checked.stdout:
             raise AssertionError("check output was not sanitized")
         exported = subprocess.run(
@@ -257,6 +283,8 @@ def test_logon_task_install_check_and_remove_on_windows():
         xml = exported.stdout
         assert "<Password>" not in xml
         assert "<UserId>SYSTEM</UserId>" not in xml
+        assert "ExecutionPolicy" not in xml
+        assert "Bypass" not in xml
         assert fixture_user not in xml
         assert "funnel" not in xml.lower()
         removed = _run_ps("remove-logon-task.ps1", [])
@@ -329,7 +357,7 @@ def test_serve_plan_script_on_windows_does_not_call_tailscale():
         env,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "apply: tailscale serve --bg --set-path=/mcp http://127.0.0.1:8765/mcp" in proc.stdout
+    assert "apply: tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8765/mcp" in proc.stdout
     assert "saved serve status" not in proc.stdout
     missing = _run_ps("plan-serve-handoff.ps1", [], env)
     assert missing.returncode != 0

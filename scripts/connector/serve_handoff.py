@@ -18,16 +18,19 @@ APPLY_COMMAND = (
     "tailscale",
     "serve",
     "--bg",
+    "--https=443",
     "--set-path=/mcp",
     BACKEND,
 )
 ROLLBACK_COMMAND = (
     "tailscale",
     "serve",
-    "--bg",
+    "--https=443",
     "--set-path=/mcp",
     "off",
 )
+READ_STATUS_COMMAND = ("tailscale", "serve", "status")
+READ_STATUS_JSON_COMMAND = ("tailscale", "serve", "status", "--json")
 _ALLOWED_URLS = {
     f"https://{ALLOWED_HOST}",
     f"https://{ALLOWED_HOST}/",
@@ -99,7 +102,9 @@ def plan_serve_handoff(status_text: str, status_json: str) -> dict[str, object]:
     text_empty = _empty_text(text)
     json_empty = _empty_json(raw_json)
     if text_empty != json_empty:
-        raise ServeHandoffError("serve status text and json disagree")
+        raise ServeHandoffError(
+            "serve status text and json disagree; other Serve handlers were not changed"
+        )
     if text_empty and json_empty:
         return {
             "action": "needs-handoff",
@@ -114,7 +119,9 @@ def plan_serve_handoff(status_text: str, status_json: str) -> dict[str, object]:
             "rollback": ROLLBACK_COMMAND,
             "endpoint": PUBLIC_HTTPS,
         }
-    raise ServeHandoffError("serve config is not the empty state or the exact private mount")
+    raise ServeHandoffError(
+        "serve config is not the empty state or the exact private mount; other Serve handlers were not changed"
+    )
 
 
 def format_plan(plan: dict[str, object]) -> str:
@@ -126,22 +133,26 @@ def format_plan(plan: dict[str, object]) -> str:
         f"action: {action}",
         "endpoint: " + PUBLIC_HTTPS,
         "backend: " + BACKEND,
-        "This plan does not change Tailscale and does not stop a process.",
+        "read: " + " ".join(READ_STATUS_COMMAND),
+        "read: " + " ".join(READ_STATUS_JSON_COMMAND),
+        "This plan does not change Tailscale, does not stop a process, and does not reset other Serve handlers.",
         "rollback: " + " ".join(rollback),
+        "Rollback removes only the /mcp handler on HTTPS port 443.",
     ]
     apply = plan.get("apply")
     if action == "needs-handoff":
         if not isinstance(apply, tuple):
             raise ServeHandoffError("serve plan is incomplete")
-        lines.insert(3, "apply: " + " ".join(apply))
+        lines.insert(5, "apply: " + " ".join(apply))
         lines.append(
-            "After apply, an unauthenticated request to the endpoint must still return 401 before the old foreground Serve window is closed."
+            "After apply, read status again. An unauthenticated request to the endpoint must still return 401 before the old foreground Serve window is closed."
         )
     elif action == "already-persistent":
         lines.append("Saved Serve config already matches. Do not apply it again.")
     else:
         raise ServeHandoffError("serve plan is incomplete")
     text = "\n".join(lines) + "\n"
-    if "funnel " in text.lower() or "\nfunnel" in text.lower():
-        raise ServeHandoffError("refusing to print a public serve command")
+    lowered = text.lower()
+    if "funnel " in lowered or "\nfunnel" in lowered or " serve reset" in lowered:
+        raise ServeHandoffError("refusing to print a public or reset serve command")
     return text

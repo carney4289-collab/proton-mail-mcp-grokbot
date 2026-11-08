@@ -128,7 +128,20 @@ function Get-ProtonLogonPowerShell {
 
 function Get-ProtonLogonArgument {
     $wrapper = Get-ProtonLogonWrapperPath
-    return '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '"'
+    return '-NoProfile -NonInteractive -File "' + $wrapper + '"'
+}
+
+function Assert-ProtonScriptPolicy {
+    param([Parameter(Mandatory = $true)][string[]]$Paths)
+    $effective = [string](Get-ExecutionPolicy)
+    if ($effective -eq "Restricted" -or $effective -eq "AllSigned") {
+        throw "Windows PowerShell execution policy is $effective. The logon task was not registered. This installer does not change execution policy and does not unblock files."
+    }
+    foreach ($path in $Paths) {
+        if (Test-Path -LiteralPath ($path + ":Zone.Identifier")) {
+            throw "A startup script is marked as downloaded, so normal execution policy can refuse it. The logon task was not registered. This installer does not unblock files and does not change execution policy."
+        }
+    }
 }
 
 function Test-ProtonDuration {

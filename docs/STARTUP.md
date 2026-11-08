@@ -28,8 +28,16 @@ Tailscale's automatic service and Bridge have time to come up. The task
 runs only while the user is logged on (`Interactive`), at limited rights,
 ignores a second start while one is still running, and has no execution
 time limit because the connector is meant to keep running. The action is
-Windows PowerShell 5.1. The task description does not contain the bearer
-token, the Bridge password, or the account password.
+Windows PowerShell 5.1 with `-NoProfile -NonInteractive -File`. It does
+not pass `-ExecutionPolicy`, does not unblock files, and does not change
+execution policy. The task description does not contain the bearer token,
+the Bridge password, or the account password.
+
+If the effective policy is Restricted or AllSigned, or a startup script is
+still marked as downloaded, install stops and does not register the task.
+The message names that condition and stops there. A task whose action
+passes `-ExecutionPolicy` is not this package's task: install and remove
+both refuse it.
 
 Installing the task does not start it and does not stop a connector that
 is already running. Removing the task does not stop that process either.
@@ -83,11 +91,12 @@ from a different copy of the scripts.
 
 ## Bridge
 
-Proton's supported setting is Bridge's own Settings switch, **Open on
-startup**. That switch is on by default and creates Bridge's startup
-entry. This repository does not read or edit Bridge's config files, and it
-has not verified the switch on this PC. The logon script only waits for
-the localhost IMAP and SMTP ports.
+The user turns on Bridge's own Settings switch, **Open on startup**, if
+it is off. That is the supported setting. It is not verified here. These
+scripts do not read or edit Bridge's config files, and they do not report
+the switch as enabled. The logon script only waits for the localhost IMAP
+and SMTP ports. If those ports stay closed, it says the connector was not
+started and that Open on startup was not verified.
 
 ## Private Serve handover
 
@@ -109,22 +118,32 @@ the command lines of `tailscale.exe` processes whose command contains
 `serve` and not `funnel`. It does not change Serve and it does not stop
 the Tailscale service.
 
-When the saved status is `No serve config`, the plan's apply command is:
+When the saved status is `No serve config` and the JSON agrees, the only
+apply command is:
 
 ```text
-tailscale serve --bg --set-path=/mcp http://127.0.0.1:8765/mcp
+tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8765/mcp
 ```
 
-The rollback command, used only if that apply does not preserve the
-private mount, is:
+Read the saved config back with:
 
 ```text
-tailscale serve --bg --set-path=/mcp off
+tailscale serve status
+tailscale serve status --json
 ```
 
-There is no `--yes` and no `tailscale funnel`. If status is already the
-exact private mount, the plan says not to apply it again. Any other
-config, a root mount, a different host, or Funnel is refused.
+The rollback command removes only that `/mcp` handler on HTTPS port 443.
+It does not reset other Serve handlers:
+
+```text
+tailscale serve --https=443 --set-path=/mcp off
+```
+
+Do not run a Serve reset. There is no `--yes` and no `tailscale funnel`.
+If status is already the exact private mount, the plan says not to apply
+it again. Any other config, a root mount, a different host, Funnel, or
+text and JSON that disagree is refused, and other handlers are left as
+they are.
 
 After apply, before closing the old foreground Serve window, an
 unauthenticated request to
