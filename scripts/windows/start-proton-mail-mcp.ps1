@@ -8,21 +8,8 @@ $EnvFile = Join-Path $Root "config\windows.env"
 if (-not (Test-Path -LiteralPath $Entry)) {
     Write-Error "missing $Entry"
 }
-if (-not (Test-Path -LiteralPath $EnvFile)) {
-    Write-Error "missing $EnvFile (copy config\windows.env.example and fill the non-secret values)"
-}
-
-Get-Content -LiteralPath $EnvFile | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -eq "" -or $line.StartsWith("#")) { return }
-    $parts = $line.Split("=", 2)
-    if ($parts.Count -ne 2) { throw "invalid env line" }
-    $name = $parts[0].Trim()
-    if ($name -match "PASSWORD|SECRET|TOKEN|AUTH") {
-        throw "refusing to load a secret from the env file: $name"
-    }
-    Set-Item -Path "Env:$name" -Value $parts[1]
-}
+. (Join-Path $PSScriptRoot "load-windows-env.ps1")
+Import-ProtonWindowsEnv -Path $EnvFile
 
 $Python = $env:PYTHON_EXE
 if (-not $Python) {

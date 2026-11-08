@@ -12,6 +12,7 @@ from connector.http_gateway import McpHttpGateway  # noqa: E402
 from connector.launch import node_argv  # noqa: E402
 from connector.local_check import initialize_and_list  # noqa: E402
 from connector.runtime_env import ConfigError, child_environment  # noqa: E402
+from connector.windows_env import apply_windows_env, package_root_from_script  # noqa: E402
 from connector.secrets import (  # noqa: E402
     BRIDGE_IMAP,
     HTTP_AUTH,
@@ -45,9 +46,16 @@ def main(argv: list[str] | None = None) -> int:
     source = dict(os.environ)
     source.pop("IMAP_PASSWORD", None)
     source.pop("PROTONMAIL_PASSWORD", None)
+    env_file = package_root_from_script(__file__) / "config" / "windows.env"
+    if env_file.is_file():
+        try:
+            apply_windows_env(source, env_file)
+        except ConfigError as exc:
+            sys.stderr.write(f"proton-mail-mcp-check: {exc}\n")
+            return 2
     try:
         child_env = child_environment(source, bridge)
-        argv_node = node_argv(os.environ.get("NODE_BIN", ""), os.environ.get("MCP_JS", ""))
+        argv_node = node_argv(source.get("NODE_BIN", ""), source.get("MCP_JS", ""))
     except (ConfigError, ValueError) as exc:
         sys.stderr.write(f"proton-mail-mcp-check: {exc}\n")
         return 2

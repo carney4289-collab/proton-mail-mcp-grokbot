@@ -109,10 +109,15 @@ The example enables the full 32-tool surface on purpose. `config/windows.env`
 is gitignored. The starter script refuses any line whose name contains
 `PASSWORD`, `SECRET`, `TOKEN`, or `AUTH`.
 
-`NODE_BIN` is the directory that contains `node.exe`
-(`C:\Program Files\nodejs` when that is where Node 24 is installed). It may
-instead be the full path of `node.exe`. The Linux wrapper still accepts a
-directory and now also accepts the `node` binary path.
+`NODE_BIN` is the directory that contains `node.exe`, or the full path of
+`node.exe` when Node is a portable copy that is not on `PATH`. A path may
+contain spaces (`C:\Program Files\nodejs\node.exe`). Both
+`start-proton-mail-mcp.ps1` and `check-local.ps1` load
+`config\windows.env` from the package root (the folder that contains
+`scripts` and `config`), not from the current directory. A non-empty
+process variable already set by the caller wins. Otherwise the file value
+is used. The check script also reads that same file itself, so the username
+is visible even when the checker is what starts Python.
 
 Mail hosts other than `127.0.0.1`, `localhost`, and `::1` are rejected at
 startup.

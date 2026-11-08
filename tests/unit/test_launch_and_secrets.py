@@ -153,12 +153,14 @@ def test_store_cli_rejects_secret_on_argv():
 
 def test_windows_scripts_do_not_take_secrets_as_parameters():
     start = open(os.path.join(ROOT, "scripts", "windows", "start-proton-mail-mcp.ps1"), encoding="utf-8").read()
+    loader = open(os.path.join(ROOT, "scripts", "windows", "load-windows-env.ps1"), encoding="utf-8").read()
     store = open(os.path.join(ROOT, "scripts", "windows", "store-credential.ps1"), encoding="utf-8").read()
     example = open(os.path.join(ROOT, "config", "windows.env.example"), encoding="utf-8").read()
     assert "Invoke-Expression" not in start
+    assert "Import-ProtonWindowsEnv" in start
     assert "127.0.0.1" in example
     assert "PASSWORD" not in example.split("PROTONMAIL_ALLOWED_ACTIONS")[0]
-    assert "refusing to load a secret" in start
+    assert "refusing to load a secret" in loader
     assert "Read-Host -AsSecureString" in store
     assert "ValidateSet" in store
     assert "& $Python" in start
