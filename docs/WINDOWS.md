@@ -176,9 +176,46 @@ authorization.
 non-loopback Host header. It does not replace the bearer token. Wildcards
 and `0.0.0.0` are rejected.
 
-## Grok Bot registration, later
+## Authorization value on the clipboard
 
-Do this only after the private HTTPS path in `docs/TAILSCALE-LATER.md` is
-separately authorized. The registration URL is the tailnet HTTPS URL. The
-static header is `Authorization: Bearer <http-auth secret>`. Do not put
-`IMAP_PASSWORD` or `PROTONMAIL_PASSWORD` in that registration.
+The native connector form takes the header value as a paste. This helper
+copies it from Credential Manager onto the clipboard. It does not open the
+form, press Add, contact the network, read `proton-mail-mcp:bridge-imap`,
+or change Windows clipboard settings.
+
+`-Confirm` is required because the current clipboard contents are replaced.
+Run it only when the form is ready for that paste, and leave the window
+open until it says the clipboard was cleared or left in place.
+
+```text
+powershell -File scripts\windows\copy-http-auth.ps1 -Confirm
+```
+
+`PYTHON_EXE`, when set, is the Python that reads Credential Manager. For
+the installed layout that is
+`C:\Users\skcar\AppData\Local\GrokBot\ProtonMailMCP\c28b7da-install-20261108\runtimes\Python314\python.exe`.
+The token is not a command-line argument.
+
+The clipboard value is the word `Bearer`, one space, and the existing
+`proton-mail-mcp:http-auth` token. It stays for 45 seconds unless
+`-Seconds` is set from 15 through 90. When the time ends, the helper
+removes it only if the clipboard still holds that same value. A newer copy
+is left alone. Closing the console window also tries to remove it when it
+is still unchanged.
+
+The copy carries the documented Windows formats
+`ExcludeClipboardContentFromMonitorProcessing`,
+`CanIncludeInClipboardHistory` with a DWORD of 0, and
+`CanUploadToCloudClipboard` with a DWORD of 0. Those ask Windows to keep
+that one copy out of clipboard history and cloud clipboard. If any of them
+cannot be set, or Windows is older than Windows 10 version 1809, the
+helper clears the clipboard and stops. It does not copy without them.
+Windows clipboard settings are not changed. A third-party clipboard
+manager can still ignore those formats.
+
+## Grok Bot registration
+
+The server URL is `https://dell-sean.tail545f1e.ts.net/mcp`. The header
+name is `Authorization`. Paste the clipboard into the header value. Do not
+put the Bridge IMAP password in the form. This repository does not submit
+the form, and the helper does not fill Client ID.
