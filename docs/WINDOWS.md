@@ -98,6 +98,28 @@ The Node process may still make its existing non-fatal SMTP connectivity
 check to `127.0.0.1:1025`. That is not a mailbox command. The check prints
 the protocol version and tool names only.
 
+## Private HTTPS check
+
+Tailscale Serve on the PC forwards
+`https://dell-sean.tail545f1e.ts.net/mcp` to `http://127.0.0.1:8765/mcp`.
+This repository does not change that Serve config, the ACL, or Funnel.
+`PROTON_MCP_EXTRA_HOSTS` on the running connector is what allows that Host
+header. The bearer stays in Credential Manager.
+
+To test the endpoint that is already running, without starting another
+server and without reading the Bridge password:
+
+```text
+powershell -File scripts\windows\check-endpoint.ps1 -Endpoint https://dell-sean.tail545f1e.ts.net/mcp
+```
+
+The endpoint argument must be that exact URL. Certificate verification stays
+on. Redirects are refused, so the bearer is not sent to another host. The
+script sends one unauthenticated request, which must be rejected, then
+`initialize`, `notifications/initialized`, and `tools/list`. It does not
+send `tools/call`. `check-local.ps1` is unchanged and still starts a
+temporary loopback server for a local-only check.
+
 ## Non-secret config
 
 ```text

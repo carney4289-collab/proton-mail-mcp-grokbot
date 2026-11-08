@@ -33,7 +33,8 @@ jobs:
             "scripts\windows\check-local.ps1",
             "scripts\windows\store-credential.ps1",
             "scripts\windows\load-windows-env.ps1",
-            "scripts\windows\start-proton-mail-mcp.ps1"
+            "scripts\windows\start-proton-mail-mcp.ps1",
+            "scripts\windows\check-endpoint.ps1"
           )
           foreach ($rel in $paths) {
             $errs = $null
