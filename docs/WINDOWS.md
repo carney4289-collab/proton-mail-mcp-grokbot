@@ -8,6 +8,13 @@ authenticated HTTP MCP endpoint on this PC.
 This repository does not install Bridge, log in, create a Windows service,
 or open a firewall rule.
 
+The Linux stdio wrapper stays the process for a Bridge on that same Linux
+box. It waits on its pipes with `select()`, which cannot watch pipes on
+Windows, so it is not the Windows launcher. Windows uses
+`scripts/proton-mail-mcp-http.py`. Node on Windows also needs the normal
+process environment (`SYSTEMROOT` in particular). Replacing that environment
+makes Node abort before it speaks MCP.
+
 ## What runs where
 
 ```

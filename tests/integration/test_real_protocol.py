@@ -228,6 +228,12 @@ def test_authenticated_http_lists_the_same_32_tools():
 
 
 def test_linux_stdio_wrapper_still_lists_32_with_full_env():
+    if os.name == "nt":
+        pytest.skip(
+            "proton-mail-mcp-wrapper.py waits on stdio with select(), and Windows "
+            "select() cannot wait on pipes. The Windows process is the loopback HTTP "
+            "connector, covered by the other tests in this file."
+        )
     wrapper = os.path.join(ROOT, "scripts", "proton-mail-mcp-wrapper.py")
     env = _base_env()
     env["NODE_BIN"] = os.path.dirname(_node())
