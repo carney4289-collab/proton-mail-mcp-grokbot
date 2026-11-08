@@ -55,13 +55,17 @@ def _empty_text(text: str) -> bool:
     return _compact(text) in {"", "no serve config", "no serve config."}
 
 
+def _load_object(raw: str) -> object:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        raise ServeHandoffError("serve status json could not be read") from None
+
+
 def _empty_json(raw: str) -> bool:
     if raw.strip() == "":
         return True
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
-        raise ServeHandoffError("serve status json could not be read") from None
+    value = _load_object(raw)
     if value in (None, {}, []):
         return True
     if not isinstance(value, dict):
@@ -71,6 +75,67 @@ def _empty_json(raw: str) -> bool:
     if set(normalized) - allowed_keys:
         return False
     return all(not normalized[key] for key in normalized)
+
+
+def _field(value: dict, name: str) -> object:
+    if name in value:
+        return value[name]
+    lowered = name.lower()
+    for key, item in value.items():
+        if str(key).lower() == lowered:
+            return item
+    return None
+
+
+def _exact_private_serve_config(config: object) -> bool:
+    """One HTTPS/443 handler: /mcp proxied to the loopback MCP path."""
+    if not isinstance(config, dict):
+        return False
+    if _field(config, "Foreground") or _field(config, "Services") or _field(config, "AllowFunnel"):
+        return False
+    tcp = _field(config, "TCP") or {}
+    if not isinstance(tcp, dict) or set(tcp) != {"443"}:
+        return False
+    port = tcp["443"]
+    if not isinstance(port, dict) or port.get("HTTPS") is not True:
+        return False
+    if port.get("TCPForward") or port.get("HTTP") or port.get("TerminateTLS"):
+        return False
+    web = _field(config, "Web") or {}
+    host = f"{ALLOWED_HOST}:443"
+    if not isinstance(web, dict) or set(web) != {host}:
+        return False
+    site = web[host]
+    if not isinstance(site, dict):
+        return False
+    handlers = _field(site, "Handlers") or {}
+    if not isinstance(handlers, dict) or set(handlers) != {MOUNT}:
+        return False
+    handler = handlers[MOUNT]
+    if not isinstance(handler, dict) or handler.get("Proxy") != BACKEND:
+        return False
+    return not any(handler.get(name) for name in ("Path", "Text", "Redirect"))
+
+
+def _exact_foreground_only(raw: str) -> bool:
+    """Saved config empty, and exactly one foreground session with the private mount.
+
+    ``tailscale serve`` without ``--bg`` stores the handler under Foreground
+    and the human status stays "No serve config". That is not a persistent
+    config and it is not permission to accept any other JSON.
+    """
+    if raw.strip() == "":
+        return False
+    value = _load_object(raw)
+    if not isinstance(value, dict):
+        return False
+    for name in ("TCP", "Web", "Services", "AllowFunnel"):
+        if _field(value, name):
+            return False
+    foreground = _field(value, "Foreground")
+    if not isinstance(foreground, dict) or len(foreground) != 1:
+        return False
+    return _exact_private_serve_config(next(iter(foreground.values())))
 
 
 def _refuse_public(blob: str) -> None:
@@ -101,6 +166,13 @@ def plan_serve_handoff(status_text: str, status_json: str) -> dict[str, object]:
     _refuse_public(text + "\n" + raw_json)
     text_empty = _empty_text(text)
     json_empty = _empty_json(raw_json)
+    if text_empty and _exact_foreground_only(raw_json):
+        return {
+            "action": "foreground-to-background",
+            "apply": APPLY_COMMAND,
+            "rollback": ROLLBACK_COMMAND,
+            "endpoint": PUBLIC_HTTPS,
+        }
     if text_empty != json_empty:
         raise ServeHandoffError(
             "serve status text and json disagree; other Serve handlers were not changed"
@@ -147,6 +219,21 @@ def format_plan(plan: dict[str, object]) -> str:
         lines.append(
             "After apply, read status again. An unauthenticated request to the endpoint must still return 401 before the old foreground Serve window is closed."
         )
+    elif action == "foreground-to-background":
+        if not isinstance(apply, tuple):
+            raise ServeHandoffError("serve plan is incomplete")
+        lines.insert(5, "apply: " + " ".join(apply))
+        lines.append("The human status is empty because this mount is only in Foreground.")
+        lines.append(
+            "After apply, read status again. The saved config must show only this /mcp proxy and must not show Funnel."
+        )
+        lines.append(
+            "An unauthenticated request to the endpoint must return 401 before the foreground tailscale serve window is closed."
+        )
+        lines.append(
+            "Close only that foreground serve window. Do not stop the Tailscale service, Bridge, or the connector."
+        )
+        lines.append("If 401 fails, run rollback and leave the foreground window running.")
     elif action == "already-persistent":
         lines.append("Saved Serve config already matches. Do not apply it again.")
     else:

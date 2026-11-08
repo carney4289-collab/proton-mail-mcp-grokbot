@@ -1,6 +1,7 @@
 """Logon startup planning stays private, and the task helpers do not launch mail."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
@@ -91,6 +92,73 @@ def test_serve_plan_is_exact_and_does_not_publish():
     )
     assert saved["action"] == "already-persistent"
     assert saved["apply"] is None
+    foreground = {
+        "TCP": {"443": {"HTTPS": True}},
+        "Web": {
+            f"{HOST}:443": {"Handlers": {"/mcp": {"Proxy": BACKEND}}},
+        },
+    }
+    owned = plan_serve_handoff(
+        "No serve config",
+        json.dumps({"Foreground": {"session-1": foreground}}),
+    )
+    owned_text = format_plan(owned)
+    assert owned["action"] == "foreground-to-background"
+    assert "apply: tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8765/mcp" in owned_text
+    assert "only in Foreground" in owned_text
+    assert "Do not stop the Tailscale service, Bridge, or the connector." in owned_text
+    assert "serve reset" not in owned_text.lower()
+    still_refused = [
+        json.dumps(
+            {
+                "Foreground": {
+                    "session-1": foreground,
+                    "session-2": foreground,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "Web": {f"{HOST}:443": {"Handlers": {"/mcp": {"Proxy": BACKEND}}}},
+                "Foreground": {"session-1": foreground},
+            }
+        ),
+        json.dumps(
+            {
+                "Foreground": {
+                    "session-1": {
+                        "TCP": {"443": {"HTTPS": True}},
+                        "Web": {
+                            f"{HOST}:443": {
+                                "Handlers": {
+                                    "/mcp": {"Proxy": BACKEND},
+                                    "/": {"Proxy": "http://127.0.0.1:8765/"},
+                                }
+                            }
+                        },
+                    }
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "Foreground": {
+                    "session-1": {
+                        "TCP": {"443": {"HTTPS": True}},
+                        "AllowFunnel": {f"{HOST}:443": True},
+                        "Web": {f"{HOST}:443": {"Handlers": {"/mcp": {"Proxy": BACKEND}}}},
+                    }
+                }
+            }
+        ),
+    ]
+    for status_json in still_refused:
+        try:
+            plan_serve_handoff("No serve config", status_json)
+            raise AssertionError("foreground mismatch was accepted")
+        except ServeHandoffError as exc:
+            assert "foreground-to-background" not in str(exc)
+            assert "other Serve handlers were not changed" in str(exc)
     refused = [
         ("tailscale funnel is on", "{}"),
         ("No serve config", '{"AllowFunnel":{"dell-sean.tail545f1e.ts.net:443":true}}'),

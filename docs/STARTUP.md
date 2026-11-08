@@ -114,36 +114,55 @@ powershell -NoProfile -File .\scripts\windows\plan-serve-handoff.ps1 -ReadLocalS
 ```
 
 That writes `state\serve-status-*.txt`, `state\serve-status-*.json`, and
-the command lines of `tailscale.exe` processes whose command contains
-`serve` and not `funnel`. It does not change Serve and it does not stop
-the Tailscale service.
+command lines for `tailscale.exe` processes that are a foreground `serve`
+without `--bg` and without `funnel`. It does not record `serve status`.
+It does not change Serve and it does not stop the Tailscale service.
 
-When the saved status is `No serve config` and the JSON agrees, the only
-apply command is:
+`tailscale serve` without `--bg` stores the handler under `Foreground`
+in `tailscale serve status --json` and ties it to that command's session.
+`tailscale serve status` still prints `No serve config` because nothing is
+saved. That pair is the foreground-only mount. It is not a disagreement
+and it is not a persistent config. The plan accepts it only when all of
+these are true: the text is `No serve config`, the saved TCP, Web,
+Services, and AllowFunnel maps are empty, there is exactly one foreground
+session, and that session has only `dell-sean.tail545f1e.ts.net:443` with
+`/mcp` proxied to `http://127.0.0.1:8765/mcp`. Any other handler, a root
+mount, a second session, Funnel, or a saved config is still refused.
+
+For that one case the apply command is:
 
 ```text
 tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8765/mcp
 ```
 
-Read the saved config back with:
+Then read status again. The saved config must show that same proxy and
+must not show Funnel. An unauthenticated request to
+`https://dell-sean.tail545f1e.ts.net/mcp` must return 401. Only then close
+the foreground `tailscale serve` window. Do not stop the Tailscale
+service, Bridge, or the connector. If 401 fails, run the rollback below
+and leave the foreground window running.
+
+When both text and JSON are empty, the same apply command is the one that
+creates the saved mount. It is a different action from the foreground
+handover.
+
+Read status with:
 
 ```text
 tailscale serve status
 tailscale serve status --json
 ```
 
-The rollback command removes only that `/mcp` handler on HTTPS port 443.
-It does not reset other Serve handlers:
+Rollback removes only that `/mcp` handler on HTTPS port 443. It does not
+reset other Serve handlers:
 
 ```text
 tailscale serve --https=443 --set-path=/mcp off
 ```
 
 Do not run a Serve reset. There is no `--yes` and no `tailscale funnel`.
-If status is already the exact private mount, the plan says not to apply
-it again. Any other config, a root mount, a different host, Funnel, or
-text and JSON that disagree is refused, and other handlers are left as
-they are.
+This handover does not start the logon task and does not restart the
+connector. Bridge **Open on startup** is still not verified.
 
 After apply, before closing the old foreground Serve window, an
 unauthenticated request to

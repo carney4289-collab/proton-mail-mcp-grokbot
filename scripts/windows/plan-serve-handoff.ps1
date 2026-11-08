@@ -32,7 +32,7 @@ if ($ReadLocalStatus) {
     $processes = Get-CimInstance Win32_Process -Filter "Name = 'tailscale.exe'"
     foreach ($item in $processes) {
         $command = [string]$item.CommandLine
-        if ($command -match "serve" -and $command -notmatch "funnel") {
+        if ($command -match '(?i)(^|\s)serve(\s|$)' -and $command -notmatch '(?i)funnel|--bg|serve status|serve reset') {
             $lines += $command
         }
     }
