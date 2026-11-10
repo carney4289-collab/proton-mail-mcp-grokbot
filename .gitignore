@@ -8,4 +8,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 config/windows.env
+config/macos.env
 state/

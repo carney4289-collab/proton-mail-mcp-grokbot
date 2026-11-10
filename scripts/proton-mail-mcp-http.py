@@ -12,6 +12,7 @@ from connector.backend import StdioBackend  # noqa: E402
 from connector.http_gateway import McpHttpGateway, validate_extra_hosts  # noqa: E402
 from connector.launch import node_argv  # noqa: E402
 from connector.runtime_env import ConfigError, child_environment  # noqa: E402
+from connector.keychain_macos import MacKeychainStore  # noqa: E402
 from connector.secrets import (  # noqa: E402
     BRIDGE_IMAP,
     HTTP_AUTH,
@@ -25,12 +26,19 @@ from connector.secrets import (  # noqa: E402
 def _store():
     kind = os.environ.get("PROTON_MCP_SECRET_STORE", "").strip().lower()
     if not kind:
-        kind = "windows" if os.name == "nt" else "pass"
+        if os.name == "nt":
+            kind = "windows"
+        elif sys.platform == "darwin":
+            kind = "keychain"
+        else:
+            kind = "pass"
     if kind == "windows":
         return WindowsCredentialStore()
     if kind == "pass":
         return PassSecretStore()
-    sys.stderr.write("proton-mail-mcp-http: secret store must be windows or pass\n")
+    if kind == "keychain":
+        return MacKeychainStore()
+    sys.stderr.write("proton-mail-mcp-http: secret store must be windows, keychain, or pass\n")
     return None
 
 
@@ -49,8 +57,11 @@ def main(argv: list[str] | None = None) -> int:
         return _fail(str(exc))
     if store is None:
         return 2
-    bridge = store.get(BRIDGE_IMAP)
-    auth = store.get(HTTP_AUTH)
+    try:
+        bridge = store.get(BRIDGE_IMAP)
+        auth = store.get(HTTP_AUTH)
+    except SecretStoreError as exc:
+        return _fail(str(exc))
     if not bridge:
         return _fail("bridge IMAP credential is not in the secret store")
     if not auth:

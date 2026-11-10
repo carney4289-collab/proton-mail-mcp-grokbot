@@ -19,6 +19,122 @@ to the same patched Node server. See `docs/WINDOWS.md`. Tailscale is not
 part of this setup; `docs/TAILSCALE-LATER.md` is the later step. Listing a
 tool is not approval to call it.
 
+macOS, when Bridge is already installed on that Mac, uses the same loopback
+HTTP connector. The steps for Sean's Mac mini are below. Longer notes on
+Keychain prompts and the Tailscale menu are in `docs/MACOS.md`.
+
+## macOS (Apple Silicon)
+
+Do these steps in order. Open **Terminal** from the Applications folder.
+Use that window, not an SSH session. Each block is one paste. Press Return
+after it. Wait until the shell asks for the next thing before you go on.
+
+The connector listens only on `127.0.0.1:8765`. Tailscale Serve publishes
+`https://seans-mac-mini.tail545f1e.ts.net/mcp` on the tailnet. Funnel stays
+off. The Bridge password and the bearer token go in the login Keychain, not
+in a file. Listing all 32 tools is not approval to send or delete mail.
+
+1. Download the project.
+
+```bash
+mkdir -p "$HOME/Library/Application Support/ProtonMailMCP"
+cd "$HOME/Library/Application Support/ProtonMailMCP"
+curl -fsSL -o proton-mail-mcp.tar.gz "https://github.com/carney4289-collab/proton-mail-mcp-grokbot/archive/refs/heads/cursor/macos-launchagent-48a9.tar.gz"
+tar -xzf proton-mail-mcp.tar.gz
+rm -rf package
+mv proton-mail-mcp-grokbot-cursor-macos-launchagent-48a9 package
+rm proton-mail-mcp.tar.gz
+```
+
+2. Install Python, Node, and the mail connector. This does not use Homebrew
+   and it does not ask for your Mac password. It asks for the Proton account
+   email. That is not the password. The download can take a few minutes.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/install.sh"
+```
+
+3. Store the Bridge password. Bridge uses one password for both IMAP and
+   SMTP. It is the password Bridge shows after you are signed in, not the
+   Proton account password. Nothing you type is shown. If macOS asks whether
+   Python may use the Keychain, click **Always Allow**. If it asks for your
+   Mac login password, that only unlocks the login Keychain.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/store-bridge.sh"
+```
+
+4. Create the bearer token. It is stored in the Keychain and it is not
+   shown. Click **Always Allow** if macOS asks again. If the script says the
+   credential already exists, leave it. Do not delete it unless you intend
+   to replace it in Keychain Access.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/new-http-auth.sh"
+```
+
+5. Leave Bridge's **Open at login** setting as it is. These scripts do not
+   change it. Bridge should already be listening on `127.0.0.1:1143` and
+   `127.0.0.1:1025`.
+
+6. Install the login helper. It starts the connector after you sign in to
+   the Mac, waits for Bridge, and restarts the connector if it crashes. It
+   does not use sudo. The Mac has to stay awake, online, and signed in.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/install-agent.sh"
+```
+
+7. Check that it is running. You want `agent: loaded`, `connector-port
+   127.0.0.1:8765 open`, and both Bridge ports open. If a Bridge port is
+   closed, open the Bridge app, wait a minute, and run this again.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/status.sh"
+```
+
+8. Publish the connector on the tailnet. Still in Terminal, not SSH.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/apply-serve.sh"
+```
+
+   If the message says the Tailscale GUI failed to start, click the
+   Tailscale icon in the menu bar and choose **Install CLI**. macOS may ask
+   for your Mac login password to install `/usr/local/bin/tailscale`. That
+   is not the Proton password. Then run the same command again.
+
+9. Confirm a request with no token is rejected. The command must print
+   `unauth 401`. A `403` means the Host header did not match; leave
+   `PROTON_MCP_EXTRA_HOSTS` as `install.sh` wrote it.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/check-endpoint.sh"
+```
+
+10. When the Grok Bot form is open and the header value box is ready, copy
+    the bearer. Paste it into the Authorization value. The server URL is
+    `https://seans-mac-mini.tail545f1e.ts.net/mcp`. The header name is
+    `Authorization`. Do not paste the Bridge password. The clipboard copy
+    is removed after 45 seconds if you have not copied something else.
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/copy-http-auth.sh" --confirm
+```
+
+Logs are in `~/Library/Logs/ProtonMailMCP/`. To stop the connector without
+removing the Keychain items or Bridge:
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/uninstall-agent.sh"
+```
+
+To remove only the `/mcp` Tailscale handler:
+
+```bash
+bash "$HOME/Library/Application Support/ProtonMailMCP/package/scripts/macos/rollback-serve.sh"
+```
+
 ## Why
 
 Proton's web UI and unofficial HTTP scrapers chew through API quota and break
