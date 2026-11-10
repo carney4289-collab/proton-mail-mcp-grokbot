@@ -15,6 +15,8 @@ jobs:
             python-version: "3.12"
           - os: windows-latest
             python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +50,12 @@ jobs:
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $rel), [ref]$null, [ref]$errs)
             if ($errs -and $errs.Count -gt 0) { $errs | ForEach-Object { Write-Output $_.ToString() }; exit 1 }
           }
+      - name: macOS script syntax and LaunchAgent plist
+        if: runner.os == 'macOS'
+        run: |
+          bash -n scripts/macos/*.sh
+          python scripts/macos/render_plist.py --package-root "$PWD" --python "$PWD/python" --home "$HOME" > "$RUNNER_TEMP/proton-mail-mcp.plist"
+          plutil -lint "$RUNNER_TEMP/proton-mail-mcp.plist"
       - name: Unit tests
         run: python -m pytest tests/unit -q --tb=short
 
